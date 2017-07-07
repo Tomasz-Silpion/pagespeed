@@ -112,6 +112,12 @@ class Pagespeed_Css_Model_Observer
             'self::processHit',
             $html
         );
+        // Step 5b - links without text/css e.g added by addLinkRel in layout
+        $html = preg_replace_callback(
+            '#<link[^>]*rel\=["\']stylesheet["\'][^>]*/>#isU',
+            'self::processHit',
+            $html
+        );
 
         // Step 6
         $html = preg_replace_callback(
