@@ -6,6 +6,8 @@
  * @author Thomas Uhlig <tuhlig@mediarox.de>
  */
 
+ use MatthiasMullie\Minify;
+
 /**
  * Standard observer class
  */
@@ -15,6 +17,20 @@ class Pagespeed_Css_Model_Observer
      * @const string
      */
     const HTML_TAG_BODY = '</body>';
+
+    /**
+     * @const string
+     */
+    const HTML_TAG_HEAD = '</head>';
+
+    const XPATH_CRITICAL_IMAGES = [
+        // explicit critical images with fetchpriority high
+        '//img[@fetchpriority="high"]',
+        // product view default main image
+        './/*[contains(concat(" ",normalize-space(@class)," ")," catalog-product-view ")]//img[@id="image-main"]',
+        // category view default image
+        './/*[contains(concat(" ",normalize-space(@class)," ")," category-image ")]/img',
+    ];
 
     /**
      * Will finally contain all css tags to move.
@@ -42,9 +58,78 @@ class Pagespeed_Css_Model_Observer
         // Step 1
         if ($this->isHitExcluded($hits[0])) return $hits[0];
 
+        $hits[0] = $this->minifyCss($hits[0]);
+
         // Step 2
         $this->cssTags .= $hits[0];
         return '';
+    }
+
+    
+    /**
+     * Minify js
+     *
+     * @param string $scriptContent
+     * @return string
+     */
+    public function minifyCss($cssContent)
+    {
+        // esclude external js
+        if (strpos($cssContent, Mage::getBaseUrl()) === false) {
+            return $cssContent;
+        }
+
+        if (!preg_match('/href="([^"]+)"/', $cssContent, $href)) {
+            return $cssContent;
+        }
+
+        // exclude already minified js
+        if(preg_match('/\.min\.css/', $cssContent)) {
+            return $cssContent;
+        }
+        $href = $href[1];
+        $hrefPath = str_replace(Mage::getBaseUrl(), Mage::getBaseDir() . '/', $href);
+        $pathOutput = str_replace(Mage::getBaseDir(), Mage::getBaseDir('media') . DS . 'cssmin', $hrefPath);
+        $pathOutput = str_replace(basename($pathOutput), basename($pathOutput, '.css') . '.min.css', $pathOutput);
+        // recreate minified file if source file has been modified
+        if (file_exists($pathOutput) && filemtime($pathOutput) < filemtime($hrefPath) || 1==1) { //FORCE RECREATE
+            unlink($pathOutput);
+        }
+        if (!file_exists($pathOutput)) {                
+            if (!file_exists(dirname($pathOutput))) {
+                mkdir(dirname($pathOutput), 0777, true);
+            }
+
+            $_cssContent = file_get_contents($hrefPath);
+            // replace relative paths ../ to absolute paths
+            $href = str_replace('css/', '', $href);
+            $_cssContent = preg_replace_callback('/url\((\'|")?(\.\.\/)?(.*?)(\'|")?\)/', function($matches) use ($href) {
+                $path = $matches[3];
+                if (strpos($path, 'http') === false) {
+                    $path = dirname($href) . '/' . $path;
+                }
+                return sprintf('url(%s)', $path);
+            }, $_cssContent);
+            
+            $minifier = new Minify\CSS($_cssContent);
+            $minifier->minify($pathOutput);
+        }
+
+        // replace href with minified href
+        $hrefNew = str_replace(Mage::getBaseDir('media') .'/', Mage::getBaseUrl('media'), $pathOutput);
+        $hrefNew .= (strpos($hrefNew, '?') !== false ? '&' : '?').sprintf('v=%s', filemtime($pathOutput));
+        $cssContent = str_replace($href, $hrefNew, $cssContent);
+
+        
+        /* if(preg_match('@media=("|\')(.*?)\1@', $cssContent, $mediaAttribute)) {
+            $cssContent = sprintf(
+                '<link rel="stylesheet" media="print" onload="this.onload=null;this.media=\'%s\'" href="%s" />',
+                $mediaAttribute[2] ?? 'all',
+                $hrefNew
+            );
+        } */
+
+        return $cssContent;
     }
 
     /**
@@ -84,9 +169,13 @@ class Pagespeed_Css_Model_Observer
      */
     public function parseCssToBottom(Varien_Event_Observer $observer)
     {
+        if ($observer->getFront()->getRequest()->isXmlHttpRequest()) {
+            return;
+        }
         //$timeStart = microtime(true);
 
         // Step 1
+        /** @var Pagespeed_Css_Helper_Data $helper */
         $helper = Mage::helper('pagespeed_css');
         if (!$helper->isEnabled()) return;
 
@@ -95,8 +184,20 @@ class Pagespeed_Css_Model_Observer
         $html = $response->getBody();
         $this->excludeList = $helper->getExcludeList();
 
+        
+        // link preload product image
+        $_criticalImages = $this->getCriticalImages($html);
+        foreach ($_criticalImages as $src) {
+            $observer->getFront()->getResponse()->setHeader('Early-Hints', 'true');
+            $observer->getFront()->getResponse()->setHeader('X-Accel-Buffering', 'no'); // for nginx no buffering
+            $observer->getFront()->getResponse()->setHeader('Link', sprintf('<%s>; Content-type rel=preload; as=image', $src));
+
+            $src = sprintf('<link rel="preload" as="image" href="%s" />', $src);
+            $html = str_replace(self::HTML_TAG_HEAD, "\n".$src . self::HTML_TAG_HEAD, $html);
+        }
+
         // Step 3
-        $closedBodyPosition = strripos($html, self::HTML_TAG_BODY);
+        $closedBodyPosition = strripos($html, self::HTML_TAG_HEAD);
         if (false === $closedBodyPosition) return;
 
         // Step 4
@@ -115,22 +216,42 @@ class Pagespeed_Css_Model_Observer
 
         // Step 6
         $html = preg_replace_callback(
-            '#<style.*</style>#isUm',
+            '#<link[^>]*rel\=["\']stylesheet["\'][^>]*>#isU',
             'self::processHit',
             $html
         );
 
         // Step 7
-        if (!$this->cssTags) return;
+        $html = preg_replace_callback(
+            '#<style.*</style>#isUm',
+            'self::processHit',
+            $html
+        );
 
         // Step 8
-        $html = preg_replace('/^\h*\v+/m', '', $html);
+        if (!$this->cssTags) return;
 
         // Step 9
-        $closedBodyPosition = strripos($html, self::HTML_TAG_BODY);
+        $html = preg_replace('/^\h*\v+/m', '', $html);
+
+        // Step 10
+        $closedBodyPosition = strripos($html, self::HTML_TAG_HEAD);
         $html = substr_replace($html, $this->cssTags, $closedBodyPosition, 0);
         $response->setBody($html);
 
         //Mage::log(round(((microtime(true) - $timeStart) * 1000)) . ' ms taken to parse Css to bottom');
+    }
+
+    private function getCriticalImages($html)
+    {
+        $dom = new DOMDocument();
+        $dom->loadHTML($html);
+        $xpath = new DOMXPath($dom);
+        $nodes = $xpath->query(implode('|', self::XPATH_CRITICAL_IMAGES));
+        $images = [];
+        foreach ($nodes as $node) {
+            $images[] = $node->getAttribute('src');
+        }
+        return array_unique($images);
     }
 }

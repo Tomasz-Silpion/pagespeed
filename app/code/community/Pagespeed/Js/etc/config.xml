@@ -11,7 +11,7 @@
 
     <modules>
         <Pagespeed_Js>
-            <version>0.0.0.2</version>
+            <version>0.0.0.3</version>
         </Pagespeed_Js>
     </modules>
 
@@ -81,9 +81,11 @@
             <js>
                 <enabled>0</enabled>
                 <exclude_enabled>1</exclude_enabled>
-                <exclude><![CDATA[/example\.js/
-#example-directory\/example\.js#
+                <exclude><![CDATA[/(.*)pagespeed_no_defer(.*)/
 ]]></exclude>
+                <exclude_actions><![CDATA[/firecheckout_(.*)/
+]]></exclude_actions>
+                <minify>1</minify>
             </js>
         </pagespeed>
     </default>
