@@ -92,7 +92,7 @@ class Pagespeed_Css_Model_Observer
         $pathOutput = str_replace(Mage::getBaseDir(), Mage::getBaseDir('media') . DS . 'cssmin', $hrefPath);
         $pathOutput = str_replace(basename($pathOutput), basename($pathOutput, '.css') . '.min.css', $pathOutput);
         // recreate minified file if source file has been modified
-        if (file_exists($pathOutput) && filemtime($pathOutput) < filemtime($hrefPath) || 1==1) { //FORCE RECREATE
+        if (file_exists($pathOutput) && filemtime($pathOutput) < filemtime($hrefPath)) { 
             unlink($pathOutput);
         }
         if (!file_exists($pathOutput)) {                
