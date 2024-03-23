@@ -97,7 +97,7 @@ class Pagespeed_Js_Model_Observer
         if ($hits[1]) {
             return str_replace($hits[1], 'type="'. self::SCRIPT_LAZY_PLACEHOLDER .'"', $scriptContent);
         } else {
-            return str_replace( $hits[1] ?: '<script', '<script type="'. self::SCRIPT_LAZY_PLACEHOLDER .'"', $scriptContent);
+            return str_replace($hits[1] ?: '<script', '<script type="'. self::SCRIPT_LAZY_PLACEHOLDER .'"', $scriptContent);
         }
     }
 
@@ -264,10 +264,6 @@ class Pagespeed_Js_Model_Observer
     {
         $this->jsResources = array_unique($this->jsResources);
 
-        $scriptLoaderLibs = <<<JS_SCRIPT_LOADER_LIB
-function scriptLoader(){let e=(e,r)=>new Promise((t,i)=>{let n=window.document.createElement("script");for(let o in n.src=e,n.async=!1,n.crossOrigin="anonymous",r=r||{})n[o]=r[o];n.addEventListener("load",()=>{t(n)},!1),n.addEventListener("error",()=>{i(n),console.log("[ERROR] Loading Script: "+n.src)},!1),window.document.body.appendChild(n)});this.load=(r,t)=>(Array.isArray(r)||(r=[r]),Promise.all(r.map(r=>e(r,t)))),this.loadChain=function(e){let r=Array.isArray(arguments)?arguments:Array.prototype.slice.call(arguments),t=this.require(r.shift()),i=this;return r.length?t.then(()=>{i.requireChain(...r)}):t}}
-JS_SCRIPT_LOADER_LIB;
-
         $jsChain = json_encode($this->jsResources);
         $scriptLoader = <<<JS_START_SCRIPT_LOADER
 
@@ -284,14 +280,14 @@ JS_SCRIPT_LOADER_LIB;
         window.addEventListener('init-external-scripts', () => {
           const loader = new scriptLoader();
             loader.load(
-                $jsChain
+                {$jsChain}
             ).then(({length}) => {
 JS_START_SCRIPT_LOADER;
 
         $_placeholder = self::SCRIPT_LAZY_PLACEHOLDER;
         $scriptLoader.= <<<JS_BODY_SCRIPT_LOADER
                 // clone with text/javascript and remove all lazy javascript, then wait for all lazy javascript to be loaded
-                let lazyJs = document.querySelectorAll('script[type="$_placeholder"]');
+                let lazyJs = document.querySelectorAll('script[type="{$_placeholder}"]');
                 let lazyJsClone = [];
                 let i = 0;
                 function loadScript(i) {
@@ -312,33 +308,25 @@ JS_START_SCRIPT_LOADER;
                             window.dispatchEvent(new Event('unload'));
                             loadScript(i);
                         } else {
-                            document.fire('dom:loaded');
-                            window.dispatchEvent(new Event('DomContentLoad2'));
-                            window.dispatchEvent(new Event('load2'));
-                            window.dispatchEvent(new Event('init-external-scripts2'));
-                            window.dispatchEvent(new Event('init-inlinejs'));
+                            {$this->getDipatchEventsJs()}
                         }
                     }).catch(function (error) {
                         console.log('lazyJsClone[i]', error);
                     });
                 }
                 loadScript(i);
-JS_BODY_SCRIPT_LOADER;
-            //$scriptLoader.= $this->getDipatchEventsJs();
-
-        $scriptLoader.= <<<JS_BODY_SCRIPT_LOADER
             });
 JS_BODY_SCRIPT_LOADER;
 
         $scriptLoader.= <<<JS_END_SCRIPT_LOADER
         }, {once: true, passive: true});
 JS_END_SCRIPT_LOADER;        
-        //$html = $scriptLoaderLibs.$scriptLoader;
+        
         if ( Mage::helper('pagespeed_js')->isMinifyEnabled() ) {
             $minifier = new Minify\JS( $scriptLoader );
             $scriptLoader = $minifier->minify();
         }
-        $scriptLoader = '<script defer="true">'.$scriptLoaderLibs.$scriptLoader.'</script>';
+        $scriptLoader = '<script defer="true">'.$scriptLoader.'</script>';
         return $scriptLoader;
     }
 
@@ -364,8 +352,7 @@ JS_END_SCRIPT_LOADER;
 
     private function getDipatchEventsJs()
     {
-        $dispatchEvents = <<<JS
-        
+        return <<<JS
         //window.dispatchEvent(new Event('onunload'));
         //window.dispatchEvent(new Event('unload'));
         document.fire('dom:loaded');
@@ -373,8 +360,7 @@ JS_END_SCRIPT_LOADER;
         window.dispatchEvent(new Event('load2'));
         window.dispatchEvent(new Event('init-external-scripts2'));
         window.dispatchEvent(new Event('init-inlinejs'));
-JS;
-        return $dispatchEvents;
+        JS;
     }
 
     protected function minifyHtml($html)
