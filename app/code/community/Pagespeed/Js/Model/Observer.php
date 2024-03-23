@@ -219,7 +219,15 @@ class Pagespeed_Js_Model_Observer
         // Step 8
         $closedBodyPosition = strripos($html, self::HTML_TAG_BODY);
         if (false === $closedBodyPosition) return;
-        $html = substr_replace($html, $this->injectScriptLoader(), $closedBodyPosition, 0);
+
+        $_bundleScriptLoader = $this->getBundleScriptLoader($this->jsResources);
+        if ( Mage::helper('pagespeed_js')->isMinifyEnabled() ) {
+            $minifier = new Minify\JS( $_bundleScriptLoader );
+            $_bundleScriptLoader = $minifier->minify();
+        }
+        $_bundleScriptLoader = '<script defer="true">'.$_bundleScriptLoader.'</script>';
+
+        $html = substr_replace($html, $_bundleScriptLoader, $closedBodyPosition, 0);
         
         // Step 9
         if ($helper->isMinifyHtmlEnabled()) {
@@ -260,11 +268,9 @@ class Pagespeed_Js_Model_Observer
         return ($c > 0);
     }
 
-    private function injectScriptLoader()
+    private function getBundleScriptLoader($jsResources)
     {
-        $this->jsResources = array_unique($this->jsResources);
-
-        $jsChain = json_encode($this->jsResources);
+        $jsChain = json_encode(array_unique($jsResources));
         $scriptLoader = <<<JS_START_SCRIPT_LOADER
 
         function scriptLoader(){let e=(e,r)=>new Promise((t,i)=>{let n=window.document.createElement("script");for(let o in n.src=e,n.async=!1,n.crossOrigin="anonymous",r=r||{})n[o]=r[o];n.addEventListener("load",()=>{t(n)},!1),n.addEventListener("error",()=>{i(n),console.log("[ERROR] Loading Script: "+n.src)},!1),window.document.body.appendChild(n)});this.load=(r,t)=>(Array.isArray(r)||(r=[r]),Promise.all(r.map(r=>e(r,t)))),this.loadChain=function(e){let r=Array.isArray(arguments)?arguments:Array.prototype.slice.call(arguments),t=this.require(r.shift()),i=this;return r.length?t.then(()=>{i.requireChain(...r)}):t}}
@@ -322,11 +328,6 @@ JS_BODY_SCRIPT_LOADER;
         }, {once: true, passive: true});
 JS_END_SCRIPT_LOADER;        
         
-        if ( Mage::helper('pagespeed_js')->isMinifyEnabled() ) {
-            $minifier = new Minify\JS( $scriptLoader );
-            $scriptLoader = $minifier->minify();
-        }
-        $scriptLoader = '<script defer="true">'.$scriptLoader.'</script>';
         return $scriptLoader;
     }
 
