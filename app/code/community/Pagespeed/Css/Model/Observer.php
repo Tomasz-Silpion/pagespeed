@@ -245,6 +245,7 @@ class Pagespeed_Css_Model_Observer
     private function getCriticalImages($html)
     {
         if (!$html) return [];
+        libxml_use_internal_errors(true);
         $dom = new DOMDocument();
         $dom->loadHTML($html);
         $xpath = new DOMXPath($dom);
