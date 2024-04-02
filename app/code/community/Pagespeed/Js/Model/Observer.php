@@ -31,6 +31,12 @@ class Pagespeed_Js_Model_Observer
     const SCRIPT_LAZY_PLACEHOLDER = 'text/lazy-javascript';
 
     /**
+     * Media bundle folder
+     * @const string
+     */
+    const MEDIA_BUNDLE_FOLDER = 'pagespeed';
+
+    /**
      * All js resources to lazy load.
      * @var array
      */
@@ -66,11 +72,7 @@ class Pagespeed_Js_Model_Observer
         $scriptContent = $hits[0];
         
         if (preg_match('/<script[^>]*src="([^"]+)"/', $scriptContent, $src)) {
-            if ( Mage::helper('pagespeed_js')->isMinifyEnabled() ) {
-                $this->jsResources[] = $this->minifyJs($scriptContent);
-            } else {
-                $this->jsResources[] = $src[1];
-            }
+            $this->jsResources[] = $this->minifyJs($scriptContent);
             return '';
         }
     
@@ -109,36 +111,42 @@ class Pagespeed_Js_Model_Observer
      */
     public function minifyJs($scriptContent)
     {
-        // esclude external js
-        if (strpos($scriptContent, Mage::getBaseUrl()) === false) {
-            return $scriptContent;
-        }
-
+        $_baseUrl = Mage::getBaseUrl(Mage_Core_Model_Store::URL_TYPE_WEB); 
+        
         preg_match('/<script[^>]*src="([^"]+)"/', $scriptContent, $src);
         $src = $src[1];
-        // exclude already minified js
-        if(preg_match('/\.min\.js/', $src)) {
+        
+        // esclude external js
+        if (strpos($src, $_baseUrl) === false) {
             return $src;
         }
+
+        $srcPath = str_replace($_baseUrl, Mage::getBaseDir() . '/', $src);
+        $pathOutput = str_replace(Mage::getBaseDir(), Mage::getBaseDir('media') . DS . self::MEDIA_BUNDLE_FOLDER, $srcPath);
+        if ( Mage::helper('pagespeed_js')->isMinifyEnabled() AND !preg_match('/\.min\.js/', $src)) {            
+            $pathOutput = str_replace(basename($pathOutput), basename($pathOutput, '.js') . '.min.js', $pathOutput);
+        }
         
-        $srcPath = str_replace(Mage::getBaseUrl(), Mage::getBaseDir() . '/', $src);
-        $pathOutput = str_replace(Mage::getBaseDir(), Mage::getBaseDir('media') . DS . 'jsmin', $srcPath);
-        $pathOutput = str_replace(basename($pathOutput), basename($pathOutput, '.js') . '.min.js', $pathOutput);
-        // recreate minified file if source file has been modified
+        $srcContent = file_get_contents($srcPath);
+        $srcContent = $this->replaceDomEvents($srcContent);
+      
         if (file_exists($pathOutput) && filemtime($pathOutput) < filemtime($srcPath)) {
             unlink($pathOutput);
         }
+        
         if (!file_exists($pathOutput)) {                
             if (!file_exists(dirname($pathOutput))) {
                 mkdir(dirname($pathOutput), 0777, true);
             }
-            $srcContent = file_get_contents($srcPath);
-            $srcContent = $this->replaceDomEvents($srcContent);
-            $minifier = new Minify\JS( $srcContent );
-            $minifier->minify($pathOutput);
+            if ( Mage::helper('pagespeed_js')->isMinifyEnabled() AND !preg_match('/\.min\.js/', $src)) {
+                $minifier = new Minify\JS( $srcContent );
+                $minifier->minify($pathOutput);
+            } else {
+                file_put_contents($pathOutput, $srcContent);
+            }
         }
-
-        // replace src with minified src
+        
+        // replace src with new src
         $srcNew = str_replace(Mage::getBaseDir('media') .'/', Mage::getBaseUrl('media'), $pathOutput);
         $srcNew .= (strpos($srcNew, '?') !== false ? '&' : '?').sprintf('v=%s', filemtime($pathOutput));
         $scriptContent = str_replace($src, $srcNew, $scriptContent);
@@ -192,21 +200,30 @@ class Pagespeed_Js_Model_Observer
         // Step 3
         $html = preg_replace_callback(
             '#\<\!--\[if[^\>]*>\s*<script.*(?![^>]*src=).*></script>\s*<\!\[endif\]-->#is',
-            'self::processHit',
+            array(
+                $this,
+                'processHit'
+            ),
             $html
         );
 
         // Step 4
         $html = preg_replace_callback(
             '#<script.*</script>#isU',
-            'self::processHit',
+            array(
+                $this,
+                'processHit'
+            ),
             $html
         );
 
         // Step 5
         $html = preg_replace_callback(
             self::REGEXP_INLINEJS,
-            'self::processInlineJs',
+            array(
+                $this,
+                'processInlineJs'
+            ),
             $html
         );
 
@@ -215,6 +232,9 @@ class Pagespeed_Js_Model_Observer
 
         // Step 7
         $html = preg_replace('/^\h*\v+/m', '', $html);
+        if ($helper->isMinifyHtmlEnabled()) {
+            $html = $this->minifyHtml($html);
+        }
         
         // Step 8
         $closedBodyPosition = strripos($html, self::HTML_TAG_BODY);
@@ -229,10 +249,7 @@ class Pagespeed_Js_Model_Observer
 
         $html = substr_replace($html, $_bundleScriptLoader, $closedBodyPosition, 0);
         
-        // Step 9
-        if ($helper->isMinifyHtmlEnabled()) {
-            $html = $this->minifyHtml($html);
-        }
+        
         
         $response->setBody($html);
 
@@ -272,8 +289,50 @@ class Pagespeed_Js_Model_Observer
     {
         $jsChain = json_encode(array_unique($jsResources));
         $scriptLoader = <<<JS_START_SCRIPT_LOADER
-
-        function scriptLoader(){let e=(e,r)=>new Promise((t,i)=>{let n=window.document.createElement("script");for(let o in n.src=e,n.async=!1,n.crossOrigin="anonymous",r=r||{})n[o]=r[o];n.addEventListener("load",()=>{t(n)},!1),n.addEventListener("error",()=>{i(n),console.log("[ERROR] Loading Script: "+n.src)},!1),window.document.body.appendChild(n)});this.load=(r,t)=>(Array.isArray(r)||(r=[r]),Promise.all(r.map(r=>e(r,t)))),this.loadChain=function(e){let r=Array.isArray(arguments)?arguments:Array.prototype.slice.call(arguments),t=this.require(r.shift()),i=this;return r.length?t.then(()=>{i.requireChain(...r)}):t}}
+        window.scriptLoader = function () {
+            /**
+             *
+             * @param {string} url
+             * @param {object=} attr
+             * @returns {Promise}
+             */
+            const loader = (url, attr) => new Promise((resolve, reject) => {
+              const script = window.document.createElement('script');
+              script.src = url;
+              script.defer = true;
+              script.async = false;
+              script.crossOrigin = 'anonymous';
+              attr = attr || {};
+          
+              for (const attrName in attr) {
+                script[attrName] = attr[attrName];
+              }
+          
+              script.addEventListener('load', () => {
+                resolve(script);
+              }, false);
+          
+              script.addEventListener('error', () => {
+                reject(script);
+              }, false);
+          
+              window.document.body.appendChild(script);
+            });
+          
+            /**
+             * Loads scripts asynchronously
+             * @param {string|string[]} urls
+             * @param {object=} attr Other script tag attributes
+             * @returns {Promise}
+             */
+            this.load = (urls, attr) => {
+              if (!Array.isArray(urls)) {
+                urls = [urls];
+              }
+          
+              return Promise.all(urls.map(url => loader(url, attr)));
+            }
+          };
 
         (events => {
             const dispatchUserInteractionEvent = () => {
@@ -287,7 +346,14 @@ class Pagespeed_Js_Model_Observer
           const loader = new scriptLoader();
             loader.load(
                 {$jsChain}
-            ).then(({length}) => {
+            )
+            .catch(error => {
+                console.log('scriptLoader error', error);
+            })
+            .then((length) => {
+                
+            })
+            .finally(() => {
 JS_START_SCRIPT_LOADER;
 
         $_placeholder = self::SCRIPT_LAZY_PLACEHOLDER;
