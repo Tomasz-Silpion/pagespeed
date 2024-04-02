@@ -23,6 +23,12 @@ class Pagespeed_Css_Model_Observer
      */
     const HTML_TAG_HEAD = '</head>';
 
+    /**
+     * Media bundle folder
+     * @const string
+     */
+    const MEDIA_BUNDLE_FOLDER = 'pagespeed';
+
     const XPATH_CRITICAL_IMAGES = [
         // explicit critical images with fetchpriority high
         '//img[@fetchpriority="high"]',
@@ -89,7 +95,7 @@ class Pagespeed_Css_Model_Observer
         }
         $href = $href[1];
         $hrefPath = str_replace(Mage::getBaseUrl(), Mage::getBaseDir() . '/', $href);
-        $pathOutput = str_replace(Mage::getBaseDir(), Mage::getBaseDir('media') . DS . 'cssmin', $hrefPath);
+        $pathOutput = str_replace(Mage::getBaseDir(), Mage::getBaseDir('media') . DS . self::MEDIA_BUNDLE_FOLDER, $hrefPath);
         $pathOutput = str_replace(basename($pathOutput), basename($pathOutput, '.css') . '.min.css', $pathOutput);
         // recreate minified file if source file has been modified
         if (file_exists($pathOutput) && filemtime($pathOutput) < filemtime($hrefPath)) { 
