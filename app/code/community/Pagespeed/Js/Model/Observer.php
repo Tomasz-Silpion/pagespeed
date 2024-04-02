@@ -95,7 +95,6 @@ class Pagespeed_Js_Model_Observer
 
         $scriptContent = $hits[0];
         $scriptContent = $this->replaceDomEvents($scriptContent);
-        //Mage::log($scriptContent);
         if ($hits[1]) {
             return str_replace($hits[1], 'type="'. self::SCRIPT_LAZY_PLACEHOLDER .'"', $scriptContent);
         } else {
@@ -264,7 +263,8 @@ class Pagespeed_Js_Model_Observer
      */
     protected function isHitExcluded($hit)
     {
-        if (strpos($hit, 'defer') OR strpos($hit, 'async')) {
+        // exclude explicit async and defer scripts
+        if (preg_match('/<script[^>]*(async|defer)[^>]*>/', $hit)) {
             return true;
         }
         $c = 0;
@@ -400,7 +400,10 @@ JS_END_SCRIPT_LOADER;
     private function replaceDomEvents($scriptContent)
     {
         // replace all window.addEventListener("DomContentLoad") e document.addEventListener("DomContentLoad") with window.addEventListener("DomContentLoad2")
-        $scriptContent = preg_replace('/((window|document)\.addEventListener\([\'"])DomContentLoad/', 'window.addEventListener("DomContentLoad2', $scriptContent);
+        $scriptContent = preg_replace('/((window|document)\.addEventListener\([\'"])DOMContentLoaded([\'"])\s?,\s?function/', 'window.addEventListener("DomContentLoaded2", function', $scriptContent);
+
+        // replace all window.addEventListener("DomContentLoad") e document.addEventListener("DomContentLoad") with window.addEventListener("DomContentLoad2")
+        $scriptContent = preg_replace('/((window|document)\.addEventListener\([\'"])DomContentLoad([\'"])\s?,\s?function/', 'window.addEventListener("DomContentLoad2", function', $scriptContent);
         
         // replace  document.observe("dom:loaded", function() { with window.addEventListener("DomContentLoad2", function() {
         $scriptContent = preg_replace('/(document|window)\.observe\s?\(([\'"])(dom:loaded)([\'"])\s?,\s?function/', 'window.addEventListener("DomContentLoad2", function', $scriptContent);
@@ -424,6 +427,7 @@ JS_END_SCRIPT_LOADER;
         //window.dispatchEvent(new Event('unload'));
         document.fire('dom:loaded');
         window.dispatchEvent(new Event('DomContentLoad2'));
+        window.dispatchEvent(new Event('DomContentLoaded2'));
         window.dispatchEvent(new Event('load2'));
         window.dispatchEvent(new Event('init-external-scripts2'));
         window.dispatchEvent(new Event('init-inlinejs'));
