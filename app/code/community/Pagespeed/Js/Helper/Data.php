@@ -15,6 +15,7 @@ class Pagespeed_Js_Helper_Data extends Mage_Core_Helper_Abstract
      * Configuration paths
      */
     const PAGESPEED_JS_ENABLED = 'pagespeed/js/enabled';
+    const PAGESPEED_JS_ONLY_ON_USER_INTERACTION = 'pagespeed/js/only_on_user_interaction';
     const PAGESPEED_JS_EXCLUDE_ENABLED = 'pagespeed/js/exclude_enabled';
     const PAGESPEED_JS_EXCLUDE = 'pagespeed/js/exclude';
     const PAGESPEED_JS_EXCLUDE_ACTIONS = 'pagespeed/js/exclude_actions';
@@ -29,6 +30,16 @@ class Pagespeed_Js_Helper_Data extends Mage_Core_Helper_Abstract
     public function isEnabled()
     {
         return Mage::getStoreConfigFlag(self::PAGESPEED_JS_ENABLED);
+    }
+
+    /**
+     * Init only on user interaction?
+     *
+     * @return bool
+     */
+    public function initOnlyOnUserInteraction()
+    {
+        return Mage::getStoreConfigFlag(self::PAGESPEED_JS_ONLY_ON_USER_INTERACTION);
     }
 
     /**

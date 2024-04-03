@@ -331,9 +331,11 @@ class Pagespeed_Js_Model_Observer
             };
             events.forEach(type => window.addEventListener(type, dispatchUserInteractionEvent, {once: true, passive: true}))
         })(['touchstart', 'scroll', 'mousemove', 'click', 'mousewheel', 'keyup', 'wakeup']);
+JS_START_SCRIPT_LOADER;
         
-        window.addEventListener('init-external-scripts', () => {
-          const loader = new scriptLoader();
+        $_placeholder = self::SCRIPT_LAZY_PLACEHOLDER;
+        $scriptLoaderBody = <<<JS_BODY_SCRIPT_LOADER
+            const loader = new scriptLoader();
             loader.load(
                 {$jsChain}
             )
@@ -344,10 +346,6 @@ class Pagespeed_Js_Model_Observer
                 
             })
             .finally(() => {
-JS_START_SCRIPT_LOADER;
-
-        $_placeholder = self::SCRIPT_LAZY_PLACEHOLDER;
-        $scriptLoader.= <<<JS_BODY_SCRIPT_LOADER
                 // clone with text/javascript and remove all lazy javascript, then wait for all lazy javascript to be loaded
                 let lazyJs = document.querySelectorAll('script[type="{$_placeholder}"]');
                 let lazyJsClone = [];
@@ -380,9 +378,16 @@ JS_START_SCRIPT_LOADER;
             });
 JS_BODY_SCRIPT_LOADER;
 
-        $scriptLoader.= <<<JS_END_SCRIPT_LOADER
-        }, {once: true, passive: true});
-JS_END_SCRIPT_LOADER;        
+
+        if( Mage::helper('pagespeed_js')->initOnlyOnUserInteraction() ) {
+            $scriptLoaderBody = <<<JS_BODY_SCRIPT_LOADER_WRAP
+            window.addEventListener('init-external-scripts', () => {
+                {$scriptLoaderBody}
+            }, {once: true, passive: true});
+        JS_BODY_SCRIPT_LOADER_WRAP;
+        }
+
+        $scriptLoader.= $scriptLoaderBody;
         
         return $scriptLoader;
     }
