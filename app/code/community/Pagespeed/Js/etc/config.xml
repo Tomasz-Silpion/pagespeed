@@ -80,6 +80,7 @@
         <pagespeed>
             <js>
                 <enabled>0</enabled>
+                <only_on_user_interaction>1</only_on_user_interaction>
                 <exclude_enabled>1</exclude_enabled>
                 <exclude><![CDATA[/(.*)pagespeed_no_defer(.*)/
 ]]></exclude>
