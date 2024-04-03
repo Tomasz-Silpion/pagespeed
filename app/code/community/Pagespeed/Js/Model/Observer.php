@@ -196,16 +196,6 @@ class Pagespeed_Js_Model_Observer
 
         if(!$html) return;        
 
-        // Step 3
-        $html = preg_replace_callback(
-            '#\<\!--\[if[^\>]*>\s*<script.*(?![^>]*src=).*></script>\s*<\!\[endif\]-->#is',
-            array(
-                $this,
-                'processHit'
-            ),
-            $html
-        );
-
         // Step 4
         $html = preg_replace_callback(
             '#<script.*</script>#isU',
