@@ -400,8 +400,11 @@ JS_BODY_SCRIPT_LOADER;
         // replace all window.addEventListener("DomContentLoad") e document.addEventListener("DomContentLoad") with window.addEventListener("DomContentLoad2")
         $scriptContent = preg_replace('/((window|document)\.addEventListener\([\'"])DomContentLoad([\'"])\s?,\s?function/', 'window.addEventListener("DomContentLoad2", function', $scriptContent);
         
-        // replace  document.observe("dom:loaded", function() { with window.addEventListener("DomContentLoad2", function() {
+        // replace document.observe("dom:loaded", function() { with window.addEventListener("DomContentLoad2", function() {
         $scriptContent = preg_replace('/(document|window)\.observe\s?\(([\'"])(dom:loaded)([\'"])\s?,\s?function/', 'window.addEventListener("DomContentLoad2", function', $scriptContent);
+
+        // replace "Event.observe(window, 'load', function() {" with "window.addEventListener("load2", function() {"
+        $scriptContent = preg_replace('/Event\.observe\s?\(window\s?,\s?([\'"])(load)([\'"])\s?,\s?function/', 'window.addEventListener("load2", function', $scriptContent);
 
         // replace $(document).ready(function() with window.addEventListener("DomContentLoad2", function()
         $scriptContent = preg_replace('/\$\((document)\)\.ready\s?\(\s?function/', 'window.addEventListener("load2", function', $scriptContent);
