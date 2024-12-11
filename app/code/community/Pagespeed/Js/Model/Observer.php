@@ -14,7 +14,7 @@ class Pagespeed_Js_Model_Observer
     /**
      * @const string
      */
-    const HTML_TAG_BODY = '</body>';
+    public const HTML_TAG_BODY = '</body>';
 
     /**
      * Will finally contain all js tags to move.
@@ -40,7 +40,9 @@ class Pagespeed_Js_Model_Observer
     public function processHit($hits)
     {
         // Step 1
-        if ($this->isHitExcluded($hits[0])) return $hits[0];
+        if ($this->isHitExcluded($hits[0])) {
+            return $hits[0];
+        }
 
         // Step 2
         $this->jsTags .= $hits[0];
@@ -86,33 +88,39 @@ class Pagespeed_Js_Model_Observer
 
         // Step 1
         $helper = Mage::helper('pagespeed_js');
-        if (!$helper->isEnabled()) return;
+        if (!$helper->isEnabled()) {
+            return;
+        }
 
         // Step 2
-        $response = $observer->getResponse();
+        $response = $observer->getFront()->getResponse();
         $html = $response->getBody();
         $this->excludeList = $helper->getExcludeList();
 
         // Step 3
         $closedBodyPosition = strripos($html, self::HTML_TAG_BODY);
-        if (false === $closedBodyPosition) return;
+        if (false === $closedBodyPosition) {
+            return;
+        }
 
         // Step 4
         $html = preg_replace_callback(
             '#\<\!--\[if[^\>]*>\s*<script.*</script>\s*<\!\[endif\]-->#isU',
-            'self::processHit',
+            [__CLASS__, 'processHit'],
             $html
         );
 
         // Step 5
         $html = preg_replace_callback(
             '#<script.*</script>#isU',
-            'self::processHit',
+            [__CLASS__, 'processHit'],
             $html
         );
 
         // Step 6
-        if (!$this->jsTags) return;
+        if (!$this->jsTags) {
+            return;
+        }
 
         // Step 7
         $html = preg_replace('/^\h*\v+/m', '', $html);
